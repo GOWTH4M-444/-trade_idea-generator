@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Trade Idea Generator | Institutional Trading Terminal</title>
+    <meta name="description" content="Institutional trading terminal with real-time price polling, TradingView charts, technical indicators, and AI trade ideas.">
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lightweight Charts CDN (jsDelivr primary + unpkg fallback) -->
+    <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js" onerror="this.onerror=null;this.src='https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js';"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="dynamic.css">
+</head>
+<body style="background-color: #0A0E12; color: #E8EAED;">
+
+    <div class="terminal-container">
+        
+        <!-- ROW 0: LIVE STREAMING MARQUEE TICKER TAPE -->
+        <div class="market-ticker-tape">
+            <div class="tape-badge"><span class="tape-live-dot"></span> LIVE TAPE</div>
+            <div class="tape-track-wrapper">
+                <div class="tape-track" id="tape-track">
+                    <!-- Dynamic Marquee Items Populated by JS -->
+                </div>
+            </div>
+            <div class="tape-tools">
+                <div class="session-pills" id="session-pills" aria-label="Market sessions"></div>
+                <span class="clock-readout num-mono" id="clock-readout" title="Local time"></span>
+                <button id="btn-help" class="tape-help-btn" type="button" title="Keyboard shortcuts (?)" aria-label="Keyboard shortcuts">?</button>
+            </div>
+        </div>
+
+        <!-- ROW 1: TOP BAR (Full Width) -->
+        <header class="top-bar">
+            <div class="top-bar-left">
+                <!-- Searchable Ticker Selector -->
+                <div class="ticker-search-container">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="ticker-input" placeholder="Search Ticker (e.g. AAPL, RELIANCE, NIFTY, BTC)..." autocomplete="off">
+                    <div id="search-suggestions" class="search-dropdown hidden"></div>
+                </div>
+
+                <!-- Symbol & Price Readout -->
+                <div class="active-symbol-group">
+                    <span id="symbol-badge" class="symbol-tag">AAPL</span>
+                    <span id="asset-type-badge" class="asset-type-tag">STOCK</span>
+                    <div class="price-readout">
+                        <span id="currency-symbol">$</span>
+                        <span id="current-price" class="num-mono live-price-tick">--</span>
+                    </div>
+                    <span id="price-change-badge" class="pct-badge num-mono">--</span>
+
+                    <!-- Live Stock Session OHLC Quick Readout -->
+                    <div class="top-ohlc-strip num-mono" title="Live Session Open, High, Low, Close">
+                        <span class="top-ohlc-item"><span class="top-ohlc-lbl">O</span><span id="top-open" class="top-ohlc-val">--</span></span>
+                        <span class="top-ohlc-item"><span class="top-ohlc-lbl">H</span><span id="top-high" class="top-ohlc-val">--</span></span>
+                        <span class="top-ohlc-item"><span class="top-ohlc-lbl">L</span><span id="top-low" class="top-ohlc-val">--</span></span>
+                        <span class="top-ohlc-item"><span class="top-ohlc-lbl">C</span><span id="top-close" class="top-ohlc-val">--</span></span>
+                    </div>
+                </div>
+
+                <!-- Data Freshness Indicator -->
+                <div id="data-freshness-badge" class="freshness-badge mode-polling">
+                    <span class="status-dot"></span>
+                    <span id="freshness-label">Polling (10s)</span>
+                </div>
+            </div>
+
+            <div class="top-bar-right">
+                <button id="btn-palette" class="icon-btn" type="button" title="Command palette (Ctrl/⌘ + K)">⌘K</button>
+                <!-- Timeframe Segmented Control -->
+                <div class="timeframe-control">
+                    <button class="tf-btn" data-tf="1m">1m</button>
+                    <button class="tf-btn" data-tf="5m">5m</button>
+                    <button class="tf-btn" data-tf="15m">15m</button>
+                    <button class="tf-btn" data-tf="1h">1H</button>
+                    <button class="tf-btn active" data-tf="1d">1D</button>
+                    <button class="tf-btn" data-tf="1wk">1W</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- ROW 2: THREE COLUMN GRID LAYOUT -->
+        <main class="terminal-body">
+            
+            <!-- LEFT COLUMN: Watchlist (~200px fixed width) -->
+            <aside class="col-watchlist">
+                <div class="panel-header">
+                    <span class="panel-title">Watchlist</span>
+                    <div class="wl-head-actions">
+                        <button id="wl-sort-btn" class="wl-sort-btn" type="button" title="Cycle sort order">Sort: Default</button>
+                        <span id="watchlist-count" class="num-mono count-tag">0</span>
+                    </div>
+                </div>
+                <div class="watchlist-filter-tabs">
+                    <button class="wl-tab active" data-market="ALL">All</button>
+                    <button class="wl-tab" data-market="US">US</button>
+                    <button class="wl-tab" data-market="IN">IN</button>
+                    <button class="wl-tab" data-market="FUTURES">Futures</button>
+                    <button class="wl-tab" data-market="CRYPTO">Crypto</button>
+                </div>
+                <div id="watchlist-items" class="watchlist-list">
+                    <!-- Dynamic Watchlist Items -->
+                </div>
+                <div class="watchlist-add-row">
+                    <input type="text" id="add-watchlist-input" placeholder="+ Add Ticker..." autocomplete="off">
+                </div>
+            </aside>
+
+            <!-- CENTER COLUMN: Main Chart & Stacked Indicators (Flexible Width) -->
+            <section class="col-chart-main">
+                <!-- Main Candlestick Chart Panel -->
+                <div class="chart-panel">
+                    <div class="chart-header-bar">
+                        <div class="chart-header-left">
+                            <span class="chart-title"><span id="chart-symbol-name">AAPL</span> — Live Chart Action</span>
+                            <div id="active-indicator-pills" class="active-indicator-pills">
+                                <span class="ind-pill default">Vol (Default)</span>
+                            </div>
+                        </div>
+
+                        <div class="chart-header-right">
+                            <!-- Indicator Selector Dropdown Feature -->
+                            <div class="indicator-select-wrapper">
+                                <button id="btn-indicator-dropdown" class="indicator-dropdown-btn" type="button" aria-haspopup="true">
+                                    <span class="ind-icon">📊</span>
+                                    <span class="ind-label">Indicators</span>
+                                    <span id="active-indicators-count" class="ind-badge">1</span>
+                                    <span class="ind-chevron">▾</span>
+                                </button>
+                                <div id="indicator-dropdown-menu" class="indicator-dropdown-menu hidden">
+                                    <div class="ind-menu-header">
+                                        <span>CHART INDICATORS & METRICS</span>
+                                        <button id="btn-reset-indicators" class="ind-reset-btn" type="button" title="Reset to Volume Only">Reset (Vol Only)</button>
+                                    </div>
+                                    
+                                    <div class="ind-section-title">CHART OVERLAYS</div>
+                                    <label class="ind-menu-item">
+                                        <input type="checkbox" id="chk-ind-volume" checked disabled>
+                                        <span class="ind-item-label">Volume Histogram</span>
+                                        <span class="ind-item-tag default">Default</span>
+                                    </label>
+                                    <label class="ind-menu-item">
+                                        <input type="checkbox" id="chk-ind-sma20">
+                                        <span class="ind-item-label">SMA 20 (Dotted Orange)</span>
+                                        <span class="ind-item-tag dot orange">●</span>
+                                    </label>
+                                    <label class="ind-menu-item">
+                                        <input type="checkbox" id="chk-ind-sma50">
+                                        <span class="ind-item-label">SMA 50 (Dashed Cyan)</span>
+                                        <span class="ind-item-tag dot cyan">●</span>
+                                    </label>
+                                    <label class="ind-menu-item">
+                                        <input type="checkbox" id="chk-ind-patterns">
+                                        <span class="ind-item-label">Candlestick Patterns</span>
+                                        <span class="ind-item-tag">Tags</span>
+                                    </label>
+
+                                    <div class="ind-menu-separator"></div>
+
+                                    <div class="ind-section-title">OSCILLATORS & DETAILED PANELS</div>
+                                    <label class="ind-menu-item">
+                                        <input type="checkbox" id="chk-ind-rsi">
+                                        <span class="ind-item-label">RSI (14) Momentum</span>
+                                    </label>
+                                    <label class="ind-menu-item">
+                                        <input type="checkbox" id="chk-ind-macd">
+                                        <span class="ind-item-label">MACD (12, 26, 9) & Bands</span>
+                                    </label>
+                                    <label class="ind-menu-item">
+                                        <input type="checkbox" id="chk-ind-orderbook">
+                                        <span class="ind-item-label">Level 2 Order Book Depth</span>
+                                    </label>
+                                    <label class="ind-menu-item">
+                                        <input type="checkbox" id="chk-ind-quant">
+                                        <span class="ind-item-label">AI Quant Factor Matrix</span>
+                                    </label>
+                                    <label class="ind-menu-item">
+                                        <input type="checkbox" id="chk-ind-backtest">
+                                        <span class="ind-item-label">Strategy Backtest Engine</span>
+                                    </label>
+                                    <label class="ind-menu-item">
+                                        <input type="checkbox" id="chk-ind-news">
+                                        <span class="ind-item-label">Market Catalysts & News</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="chart-type-toggle">
+                                <button id="btn-chart-candle" class="chart-mode-btn active">Candles</button>
+                                <button id="btn-chart-line" class="chart-mode-btn">Line</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="chart-wrapper">
+                        <!-- Dynamic Live Floating OHLCV HUD & Candle Countdown Overlay -->
+                        <div id="chart-floating-hud" class="chart-floating-hud">
+                            <div class="hud-left-group">
+                                <span class="hud-sym-badge" id="hud-sym">AAPL</span>
+                                <span class="hud-tf-badge" id="hud-tf">1D</span>
+                                <div class="hud-metrics-row num-mono">
+                                    <span class="hud-metric"><span class="hud-lbl">O</span><span id="hud-open" class="hud-val">--</span></span>
+                                    <span class="hud-metric"><span class="hud-lbl">H</span><span id="hud-high" class="hud-val">--</span></span>
+                                    <span class="hud-metric"><span class="hud-lbl">L</span><span id="hud-low" class="hud-val">--</span></span>
+                                    <span class="hud-metric"><span class="hud-lbl">C</span><span id="hud-close" class="hud-val">--</span></span>
+                                    <span class="hud-metric"><span class="hud-lbl">Chg</span><span id="hud-chg" class="hud-val">--</span></span>
+                                    <span class="hud-metric"><span class="hud-lbl">Vol</span><span id="hud-vol" class="hud-val">--</span></span>
+                                </div>
+                            </div>
+                            <div class="hud-right-group">
+                                <div class="hud-countdown-pill num-mono" title="Time remaining until active candle closes">
+                                    <span class="hud-pulse-dot"></span>
+                                    <span class="hud-cd-label">Bar Close:</span>
+                                    <span id="candle-countdown-timer" class="hud-cd-val">⏱ 00:00</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="chart-loading" class="chart-loading" aria-live="polite">
+                            <div class="spinner"></div>
+                            <span id="chart-loading-label">Loading market data…</span>
+                        </div>
+                        <div id="tv-chart-container"></div>
+                        <canvas id="fallback-chart-canvas" class="hidden"></canvas>
+                    </div>
+                </div>
+
+                <!-- Stacked Indicator Panes (RSI & MACD) -->
+                <div class="indicator-panes-stack">
+                    
+                    <!-- RSI Pane -->
+                    <div id="pane-rsi" class="indicator-pane hidden">
+                        <div class="pane-header">
+                            <div class="pane-title-group">
+                                <button class="pane-toggle-btn" data-target="rsi-content">▼</button>
+                                <span class="pane-name">RSI (14)</span>
+                                <span id="rsi-status-tag" class="pane-status neutral">Neutral</span>
+                            </div>
+                            <span id="rsi-val-readout" class="num-mono readout-val">64.38</span>
+                        </div>
+                        <div id="rsi-content" class="pane-content">
+                            <div class="rsi-track">
+                                <div id="rsi-bar" class="rsi-fill" style="width: 0%;"></div>
+                            </div>
+                            <div class="rsi-scale"><span>0</span><span>30</span><span>70</span><span>100</span></div>
+                        </div>
+                    </div>
+
+                    <!-- MACD Pane -->
+                    <div id="pane-macd" class="indicator-pane hidden">
+                        <div class="pane-header">
+                            <div class="pane-title-group">
+                                <button class="pane-toggle-btn" data-target="macd-content">▼</button>
+                                <span class="pane-name">MACD (12, 26, 9)</span>
+                                <span id="macd-status-tag" class="pane-status positive">Bullish Cross</span>
+                            </div>
+                            <div class="macd-readout-group num-mono">
+                                MACD: <span id="macd-line-val" class="num-val positive">+4.12</span> | 
+                                Signal: <span id="macd-signal-val" class="num-val">+2.50</span> | 
+                                Hist: <span id="macd-hist-val" class="num-val positive">+1.62</span>
+                            </div>
+                        </div>
+                        <div id="macd-content" class="pane-content">
+                            <div class="sub-metrics-grid">
+                                <div class="sub-metric-box">
+                                    <span class="sm-label">Bollinger Band Status</span>
+                                    <span id="bb-status-val" class="sm-val">Normal Volatility</span>
+                                </div>
+                                <div class="sub-metric-box">
+                                    <span class="sm-label">EMA Crossover (9/21)</span>
+                                    <span id="ema-cross-val" class="sm-val positive">Bullish Cross</span>
+                                </div>
+                                <div class="sub-metric-box">
+                                    <span class="sm-label">Support / Resistance</span>
+                                    <span id="sr-levels-val" class="sm-val num-mono">S: 330.5 | R: 345.0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Order Book Level 2 Depth & Microstructure Pane -->
+                    <div id="pane-orderbook" class="indicator-pane hidden">
+                        <div class="pane-header">
+                            <div class="pane-title-group">
+                                <button class="pane-toggle-btn" data-target="orderbook-content">▼</button>
+                                <span class="pane-name">Order Book Depth (Level 2 for crypto, best bid/ask elsewhere)</span>
+                                <span id="orderbook-bias-tag" class="pane-status">--</span>
+                            </div>
+                            <div class="ob-ratio-readout num-mono">
+                                Bids: <span id="bid-pct-val" class="num-val positive">--</span> | Asks: <span id="ask-pct-val" class="num-val negative">--</span>
+                            </div>
+                        </div>
+                        <div id="orderbook-content" class="pane-content">
+                            <div class="ob-track-bar">
+                                <div id="ob-bids-bar" class="ob-fill-bids" style="width: 0%;"></div>
+                                <div id="ob-asks-bar" class="ob-fill-asks" style="width: 0%;"></div>
+                            </div>
+                            <div class="ob-levels-grid num-mono">
+                                <div class="ob-col ob-bids">
+                                    <div class="ob-row-header">Top Buy Orders (Bids)</div>
+                                    <div id="bids-list">
+                                        <!-- Dynamic Bids -->
+                                    </div>
+                                </div>
+                                <div class="ob-col ob-asks">
+                                    <div class="ob-row-header">Top Sell Orders (Asks)</div>
+                                    <div id="asks-list">
+                                        <!-- Dynamic Asks -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- AI Quantitative Factor Matrix Pane -->
+                    <div id="pane-quant" class="indicator-pane hidden">
+                        <div class="pane-header">
+                            <div class="pane-title-group">
+                                <button class="pane-toggle-btn" data-target="quant-matrix-content">▼</button>
+                                <span class="pane-name">Institutional Quantitative Matrix & Factor Score</span>
+                                <span id="quant-score-tag" class="pane-status">Score: --</span>
+                            </div>
+                        </div>
+                        <div id="quant-matrix-content" class="pane-content">
+                            <div class="quant-grid">
+                                <div class="quant-card">
+                                    <span class="q-label">Relative Volume Ratio</span>
+                                    <span id="q-rvol" class="q-val num-mono">--</span>
+                                </div>
+                                <div class="quant-card">
+                                    <span class="q-label">52-Week Range Position</span>
+                                    <span id="q-52w-pos" class="q-val num-mono">--</span>
+                                </div>
+                                <div class="quant-card">
+                                    <span class="q-label">Volatility Index (ATR)</span>
+                                    <span id="q-atr" class="q-val num-mono">--</span>
+                                </div>
+                                <div class="quant-card">
+                                    <span class="q-label">Multi-Factor Bias</span>
+                                    <span id="q-sentiment" class="q-val">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Strategy Backtest & Hit Rate Engine Pane -->
+                    <div id="pane-backtest" class="indicator-pane backtest-pane hidden">
+                        <div class="pane-header">
+                            <div class="pane-title-group">
+                                <button class="pane-toggle-btn" data-target="backtest-content">▼</button>
+                                <span class="pane-name">Strategy Backtest Engine (1-Year Historical Evidence)</span>
+                                <span id="backtest-winrate-tag" class="pane-status positive">Win Rate: --</span>
+                            </div>
+                            <div class="backtest-actions">
+                                <button id="btn-run-backtest" class="btn-backtest-trigger">⚡ Run Backtest</button>
+                            </div>
+                        </div>
+                        <div id="backtest-content" class="pane-content">
+                            <div class="backtest-summary-row num-mono">
+                                <div class="bt-metric">
+                                    <span class="bt-lbl">Hit Rate / Win %</span>
+                                    <span id="bt-winrate" class="bt-val">--</span>
+                                </div>
+                                <div class="bt-metric">
+                                    <span class="bt-lbl">Net Return (ROI)</span>
+                                    <span id="bt-roi" class="bt-val">--</span>
+                                </div>
+                                <div class="bt-metric">
+                                    <span class="bt-lbl">Profit Factor</span>
+                                    <span id="bt-pf" class="bt-val">--</span>
+                                </div>
+                                <div class="bt-metric">
+                                    <span class="bt-lbl">Max Drawdown</span>
+                                    <span id="bt-dd" class="bt-val">--</span>
+                                </div>
+                                <div class="bt-metric">
+                                    <span class="bt-lbl">Total Trades</span>
+                                    <span id="bt-trades" class="bt-val">--</span>
+                                </div>
+                                <div class="bt-metric">
+                                    <span class="bt-lbl">Avg R:R</span>
+                                    <span id="bt-rr" class="bt-val">--</span>
+                                </div>
+                            </div>
+                            <div class="equity-box">
+                                <div class="bt-box-title">Equity Curve (1Y backtest)</div>
+                                <canvas id="equity-canvas" class="equity-canvas"></canvas>
+                            </div>
+                            <div class="bt-recent-trades-box">
+                                <div class="bt-box-title">Recent Backtested Strategy Executions</div>
+                                <div id="bt-trades-list" class="bt-trades-list num-mono">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Live Market Catalysts & Financial News Feed Pane -->
+                    <div id="pane-news" class="indicator-pane news-pane hidden">
+                        <div class="pane-header">
+                            <div class="pane-title-group">
+                                <button class="pane-toggle-btn" data-target="news-content">▼</button>
+                                <span class="pane-name">Latest Headlines</span>
+                                <span class="pane-status">Source: Yahoo Finance via yfinance</span>
+                            </div>
+                        </div>
+                        <div id="news-content" class="pane-content">
+                            <div id="live-news-feed" class="news-tape-list">
+                                <!-- Dynamic News Headlines -->
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </section>
+
+            <!-- RIGHT COLUMN: AI Trade Ideas (~320px fixed width) -->
+            <aside class="col-trade-ideas">
+                <div class="panel-header">
+                    <div class="panel-header-left">
+                        <span class="panel-title">AI Trade Ideas</span>
+                        <span id="sentiment-tag" class="sentiment-badge positive">Bullish</span>
+                    </div>
+                    <div class="panel-header-right">
+                        <button id="btn-refresh-ideas" class="btn-refresh-ideas" type="button" title="Regenerate trade setups for current live price and timeline">
+                            <span class="refresh-icon">🔄</span>
+                            <span class="refresh-label">Refresh</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="ideas-subbar">
+                    <span class="ideas-timeline-tag num-mono" id="ideas-timeline-tag">⏱ Live 1D Setups</span>
+                    <span class="ideas-updated-time num-mono" id="ideas-updated-time">Updated: Just now</span>
+                </div>
+                
+                <div id="api-warning-bar" class="api-warning-banner hidden">
+                    <span>💡 Set <code>ANTHROPIC_API_KEY</code> for live Claude AI models.</span>
+                </div>
+
+                <div id="trade-ideas-list" class="ideas-scroll-list">
+                    <!-- Dynamic Trade Cards -->
+                </div>
+            </aside>
+
+        </main>
+
+        <!-- ROW 3: COLLAPSIBLE POSITION SIZING CALCULATOR DRAWER -->
+        <footer class="drawer-container">
+            <div class="drawer-header">
+                <div class="drawer-title-group">
+                    <button id="drawer-toggle-btn" class="drawer-btn">▲</button>
+                    <span class="drawer-title">Position Sizing & Risk Calculator</span>
+                </div>
+                <div class="drawer-summary num-mono">
+                    Max Risk: <span id="drawer-max-risk" class="num-val negative">$200.00</span>
+                </div>
+            </div>
+            <div id="drawer-content" class="drawer-body collapsed">
+                <div class="calc-grid">
+                    <div class="calc-input-group">
+                        <label for="account-capital">Account Capital (<span id="calc-currency-sym">$</span>)</label>
+                        <input type="number" id="account-capital" class="num-mono" value="10000" min="100" step="500">
+                    </div>
+                    <div class="calc-input-group">
+                        <label for="risk-percent">Risk Per Trade (%)</label>
+                        <input type="number" id="risk-percent" class="num-mono" value="2" min="0.5" max="10" step="0.5">
+                    </div>
+                    <div class="calc-output-group">
+                        <span class="calc-out-label">Max Risk Amount</span>
+                        <span id="calc-risk-out" class="num-mono out-val negative">$200.00</span>
+                    </div>
+                    <div class="calc-output-group">
+                        <span class="calc-out-label">Computed Share Quantity</span>
+                        <span id="calc-qty-out" class="num-mono out-val">28 units</span>
+                    </div>
+                    <div class="calc-output-group">
+                        <span class="calc-out-label">Est. Target Profit</span>
+                        <span id="calc-profit-out" class="num-mono out-val positive">+$450.00</span>
+                    </div>
+                </div>
+            </div>
+        </footer>
+
+        <nav class="mobile-tabs" id="mobile-tabs" aria-label="Sections">
+            <button class="mobile-tab" data-tab="watch" type="button">Watchlist</button>
+            <button class="mobile-tab active" data-tab="chart" type="button">Chart</button>
+            <button class="mobile-tab" data-tab="ideas" type="button">AI Ideas</button>
+        </nav>
+
+    </div>
+
+    <div id="toast-stack" aria-live="polite"></div>
+
+    <!-- Application Script Files -->
+    <script src="config.js"></script>
+    <script src="ui-kit.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
