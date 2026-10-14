@@ -1,4 +1,4 @@
-// Institutional Trading Terminal Engine v3.1
+// Institutional Trading Terminal Engine v3.2
 
 let tvChart = null;
 let candleSeries = null;
@@ -19,7 +19,7 @@ let activeWatchlistTab = 'ALL';
 
 // User Indicator Selection State - Volume only is enabled by default for a clean chart
 const indicatorConfig = {
-    volume: true,     // User requirement: ONLY Volume indicator active by default
+    volume: true,     // Default: ONLY Volume indicator active
     sma20: false,
     sma50: false,
     patterns: false,
@@ -60,7 +60,7 @@ let watchlistItems = [
     { symbol: 'USDINR=X', price: null, change: null, market: 'FOREX', type: 'FOREX' }
 ];
 
-// ---- Persistent / dynamic UI state (see ui-kit.js)
+// Persistent UI state via ui-kit.js
 const UIK = window.UI;
 let analysisSeq = 0;
 let activeIdeaIdx = null;
@@ -70,6 +70,7 @@ let chartResizeObserver = null;
 let watchlistSort = UIK.store.get('wlSort', 'default');
 let lastBacktest = null;
 const VALID_TF = ['1m', '5m', '15m', '1h', '1d', '1wk'];
+
 {
     const savedInd = UIK.store.get('indicators', null);
     if (savedInd) Object.keys(indicatorConfig).forEach(k => {
@@ -303,7 +304,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     updateActiveIndicatorPills();
-    // Restore saved indicator panes
     indicatorKeys.forEach(k => { if (indicatorConfig[k]) setIndicatorState(k, true); });
 
     document.querySelectorAll('.pane-toggle-btn').forEach(btn => {
@@ -576,7 +576,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const data = await response.json();
-            if (seq !== analysisSeq) return; // a newer request superseded this one
+            if (seq !== analysisSeq) return;
 
             if (!data.success) {
                 throw new Error('Analysis payload returned unsuccessful status.');
@@ -607,7 +607,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 type: 'error',
                 action: { label: 'Retry', onClick: () => triggerAnalysis(ticker, market, interval) }
             });
-            // Restore the previous symbol's panels and live feed instead of leaving skeletons
             if (currentAnalysisData) {
                 const m = currentAnalysisData.metadata;
                 renderTradeIdeas(currentAnalysisData.ai_analysis, m.currency, currentAnalysisData.api_key_configured, { recalc: true });
@@ -615,7 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 startOrderBookRefresh(m.symbol, m.currency === 'INR' ? '₹' : '$');
             } else {
                 const list = document.getElementById('trade-ideas-list');
-                if (list) list.innerHTML = '<div class="news-empty">Could not load data. Check that the backend is running.</div>';
+                if (list) list.innerHTML = '<div class="news-empty">Could not load data. Check that backend is running.</div>';
             }
         } finally {
             if (seq === analysisSeq) setChartLoading(false);
@@ -766,7 +765,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch(`${CONFIG.API_BASE_URL}/backtest?ticker=${encodeURIComponent(symbol)}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
-            if (currentAnalysisData && currentAnalysisData.metadata.symbol !== symbol) return; // stale
+            if (currentAnalysisData && currentAnalysisData.metadata.symbol !== symbol) return;
             if (!(data.success && data.backtest)) throw new Error('No backtest data');
 
             const bt = data.backtest;
@@ -835,7 +834,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch(`${CONFIG.API_BASE_URL}/news?ticker=${encodeURIComponent(symbol)}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
-            // Ignore stale responses if the user already switched symbols
             if (currentAnalysisData && currentAnalysisData.metadata.symbol !== symbol) return;
 
             container.innerHTML = '';
@@ -888,7 +886,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const close = prices[i];
             const prevClose = prices[i-1];
-            const open = prevClose;
+            const open = (chartData.opens && chartData.opens[i] !== undefined) ? chartData.opens[i] : prevClose;
             const high = highs[i] || Math.max(open, close);
             const low = lows[i] || Math.min(open, close);
 
@@ -897,8 +895,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const upperWick = high - Math.max(open, close);
             const lowerWick = Math.min(open, close) - low;
 
-            const prevOpen = i > 1 ? prices[i-2] : prevClose;
-            const prevBodySize = Math.abs(prevClose - prevOpen);
+            const prevOpen = (chartData.opens && chartData.opens[i-1] !== undefined) ? chartData.opens[i-1] : (i > 1 ? prices[i-2] : prevClose);
 
             // Bullish Engulfing
             if (prevClose < prevOpen && close > open && close >= prevOpen && open <= prevClose) {
@@ -908,11 +905,11 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (prevClose > prevOpen && close < open && close <= prevOpen && open >= prevClose) {
                 markers.push({ time: timeVal, position: 'aboveBar', color: '#FF5D5D', shape: 'arrowDown', text: 'Bearish Engulfing' });
             }
-            // Hammer / Bullish Pinbar
+            // Hammer
             else if (lowerWick >= bodySize * 1.8 && upperWick <= bodySize * 0.6 && close >= open) {
                 markers.push({ time: timeVal, position: 'belowBar', color: '#00D4A0', shape: 'circle', text: 'Hammer' });
             }
-            // Shooting Star / Bearish Pinbar
+            // Shooting Star
             else if (upperWick >= bodySize * 1.8 && lowerWick <= bodySize * 0.6 && close <= open) {
                 markers.push({ time: timeVal, position: 'aboveBar', color: '#FF5D5D', shape: 'circle', text: 'Shooting Star' });
             }
@@ -993,7 +990,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function updateFreshnessBadge(mode, label) {
         const badge = document.getElementById('data-freshness-badge');
         const labelElem = document.getElementById('freshness-label');
-        
+        if (!badge || !labelElem) return;
         badge.className = `freshness-badge mode-${mode}`;
         labelElem.textContent = label;
     }
@@ -1005,7 +1002,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isUp = newPrice >= latestRealPrice;
         if (!isMicro) latestRealPrice = newPrice;
 
-        priceElem._tweenToken = (priceElem._tweenToken || 0) + 1; // cancel any running count-up
+        priceElem._tweenToken = (priceElem._tweenToken || 0) + 1;
         priceElem.textContent = newPrice.toFixed(2);
         if (currentAnalysisData) document.title = `${currentAnalysisData.metadata.symbol} ${newPrice.toFixed(2)} · AI Trade Terminal`;
         if (!isMicro) {
@@ -1078,7 +1075,6 @@ document.addEventListener('DOMContentLoaded', () => {
         sentBadge.textContent = indicators.sentiment;
         sentBadge.className = `sentiment-badge ${indicators.technical_score >= 55 ? 'positive' : 'negative'}`;
 
-        // Immediately populate Session OHLC values in Top Bar and Chart HUD so they never display empty '--'
         const oVal = meta.open !== undefined ? meta.open : meta.current_price;
         const hVal = meta.high !== undefined ? meta.high : meta.current_price;
         const lVal = meta.low !== undefined ? meta.low : meta.current_price;
@@ -1112,7 +1108,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('sr-levels-val').textContent = `S: ${fmtLvl((indicators.support_levels || [])[0])} | R: ${fmtLvl((indicators.resistance_levels || [])[0])}`;
     }
 
-    // TradingView Lightweight Candlestick Chart Renderer & Canvas Fallback Engine
     function formatLwTime(t) {
         if (typeof t === 'number') return t;
         if (typeof t === 'string') {
@@ -1125,7 +1120,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return t;
     }
 
-    // Dynamic Floating OHLCV HUD Updater
     function updateFloatingHud(candle, volume, sym, tf, currency) {
         if (!candle) return;
         const hudSym = document.getElementById('hud-sym');
@@ -1154,7 +1148,6 @@ document.addEventListener('DOMContentLoaded', () => {
             hudClose.className = `hud-val ${close >= open ? 'positive' : 'negative'}`;
         }
 
-        // Synchronize Top Bar Session OHLC Quick Readout
         const topO = document.getElementById('top-open');
         const topH = document.getElementById('top-high');
         const topL = document.getElementById('top-low');
@@ -1195,7 +1188,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!container) return;
         container.style.backgroundColor = '#131922';
         if (chartResizeObserver) { chartResizeObserver.disconnect(); chartResizeObserver = null; }
-        if (tvChart) { try { tvChart.remove(); } catch (e) { /* already disposed */ } tvChart = null; }
+        if (tvChart) { try { tvChart.remove(); } catch (e) {} tvChart = null; }
         candleSeries = lineSeries = volumeSeries = sma20Series = sma50Series = null;
         ideaPriceLines = [];
         container.innerHTML = '';
@@ -1247,9 +1240,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const rawTime = timestamps[i];
                 const timeStr = formatLwTime(rawTime);
 
-                if (lastTimeVal !== null && timeStr <= lastTimeVal) {
-                    continue;
-                }
+                if (lastTimeVal !== null && timeStr <= lastTimeVal) continue;
                 lastTimeVal = timeStr;
 
                 const close = round2(prices[i]);
@@ -1285,7 +1276,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 candleSeries.setData(candleData);
 
-                // Candlestick Pattern Markers: only shown if selected in indicators menu
                 if (indicatorConfig.patterns) {
                     const patternMarkers = detectCandlestickPatterns(chartData);
                     if (patternMarkers && patternMarkers.length > 0) {
@@ -1297,7 +1287,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 lineSeries.setData(lineData);
             }
 
-            // Volume Histogram: Rendered as primary indicator (default)
             if (indicatorConfig.volume) {
                 volumeSeries = tvChart.addHistogramSeries({
                     priceFormat: { type: 'volume' },
@@ -1307,13 +1296,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 volumeSeries.setData(volumeData);
             }
 
-            // SMA 20 Overlay: only if selected
             if (indicatorConfig.sma20 && sma20Data.length > 0) {
                 sma20Series = tvChart.addLineSeries({ color: '#f59e0b', lineWidth: 1.5, lineStyle: LightweightCharts.LineStyle.Dotted });
                 sma20Series.setData(sma20Data);
             }
 
-            // SMA 50 Overlay: only if selected
             if (indicatorConfig.sma50 && sma50Data.length > 0) {
                 sma50Series = tvChart.addLineSeries({ color: '#06b6d4', lineWidth: 1.5, lineStyle: LightweightCharts.LineStyle.Dashed });
                 sma50Series.setData(sma50Data);
@@ -1321,11 +1308,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             tvChart.timeScale().fitContent();
 
-            // Initial Floating HUD Setup with latest candle and volume
             const lastVol = volumes.length > 0 ? volumes[volumes.length - 1] : 0;
             updateFloatingHud(latestCandleObj, lastVol, currentAnalysisData ? currentAnalysisData.metadata.symbol : 'AAPL', activeTimeframe, currency);
 
-            // Crosshair Movement Subscription for Dynamic Real-Time HUD Tracking
             tvChart.subscribeCrosshairMove((param) => {
                 if (!param || !param.point || !param.time) {
                     const lastVol = volumes.length > 0 ? volumes[volumes.length - 1] : 0;
@@ -1422,7 +1407,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (minPrice === maxPrice) { minPrice *= 0.95; maxPrice *= 1.05; }
         const priceRange = maxPrice - minPrice;
 
-        // Draw horizontal grid lines & price scale labels
         ctx.strokeStyle = '#1F2733';
         ctx.lineWidth = 1;
         ctx.fillStyle = '#8B95A1';
@@ -1442,7 +1426,6 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.fillText(`${currencySym}${priceVal.toFixed(2)}`, chartW + 6, y + 4);
         }
 
-        // Draw vertical grid lines & dates
         const dateSteps = Math.min(6, timestamps.length);
         const stepIdx = Math.floor(timestamps.length / dateSteps);
         for (let i = 0; i < dateSteps; i++) {
@@ -1465,14 +1448,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const x = (i / Math.max(1, prices.length - 1)) * chartW;
             const close = prices[i];
             const prevClose = i > 0 ? prices[i-1] : close;
-            const open = i > 0 ? prevClose : close * 0.998;
+            const open = (chartData.opens && chartData.opens[i] !== undefined) ? chartData.opens[i] : (i > 0 ? prevClose : close * 0.998);
             const high = highs[i] || Math.max(open, close);
             const low = lows[i] || Math.min(open, close);
 
             const isUp = close >= open;
             const candleColor = isUp ? '#00D4A0' : '#FF5D5D';
 
-            // Volume Histogram Bar - rendered if volume indicator is enabled
             if (indicatorConfig.volume) {
                 const volH = (volumes[i] / maxVol) * (chartH * 0.22);
                 ctx.fillStyle = isUp ? 'rgba(0, 212, 160, 0.25)' : 'rgba(255, 93, 93, 0.25)';
@@ -1480,7 +1462,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             if (chartType === 'candle') {
-                // Wick
                 const yHigh = chartH - ((high - minPrice) / priceRange) * chartH;
                 const yLow = chartH - ((low - minPrice) / priceRange) * chartH;
 
@@ -1491,7 +1472,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 ctx.lineTo(x, yLow);
                 ctx.stroke();
 
-                // Body
                 const yOpen = chartH - ((open - minPrice) / priceRange) * chartH;
                 const yClose = chartH - ((close - minPrice) / priceRange) * chartH;
                 const bodyY = Math.min(yOpen, yClose);
@@ -1515,7 +1495,6 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.stroke();
         }
 
-        // SMA 20 Overlay (Dotted Orange) - only if selected
         if (indicatorConfig.sma20 && sma20.length > 0) {
             ctx.strokeStyle = '#f59e0b';
             ctx.lineWidth = 1.5;
@@ -1534,7 +1513,6 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.setLineDash([]);
         }
 
-        // SMA 50 Overlay (Dashed Cyan) - only if selected
         if (indicatorConfig.sma50 && sma50.length > 0) {
             ctx.strokeStyle = '#06b6d4';
             ctx.lineWidth = 1.5;
@@ -1553,11 +1531,10 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.setLineDash([]);
         }
 
-        // Initial and Interactive HUD support for Fallback Canvas
         const lastVol = volumes.length > 0 ? volumes[volumes.length - 1] : 0;
         if (prices.length > 0) {
             const lastClose = prices[prices.length - 1];
-            const lastOpen = prices.length > 1 ? prices[prices.length - 2] : lastClose;
+            const lastOpen = (chartData.opens && chartData.opens.length > 0) ? chartData.opens[chartData.opens.length - 1] : lastClose;
             const lastHigh = highs.length > 0 ? highs[highs.length - 1] : lastClose;
             const lastLow = lows.length > 0 ? lows[lows.length - 1] : lastClose;
             updateFloatingHud({ open: lastOpen, high: lastHigh, low: lastLow, close: lastClose }, lastVol, currentAnalysisData ? currentAnalysisData.metadata.symbol : 'AAPL', activeTimeframe, currency);
@@ -1569,7 +1546,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const idx = Math.min(Math.max(0, Math.floor((mouseX / chartW) * prices.length)), prices.length - 1);
             if (idx >= 0 && idx < prices.length) {
                 const c = prices[idx];
-                const o = idx > 0 ? prices[idx - 1] : c * 0.998;
+                const o = (chartData.opens && chartData.opens[idx] !== undefined) ? chartData.opens[idx] : (idx > 0 ? prices[idx - 1] : c * 0.998);
                 const h = highs[idx] || Math.max(o, c);
                 const l = lows[idx] || Math.min(o, c);
                 const v = volumes[idx] || 0;
@@ -1598,7 +1575,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function clearIdeaLines() {
         const s = mainSeries();
-        ideaPriceLines.forEach(l => { try { if (s) s.removePriceLine(l); } catch (e) { /* series gone */ } });
+        ideaPriceLines.forEach(l => { try { if (s) s.removePriceLine(l); } catch (e) {} });
         ideaPriceLines = [];
     }
 
@@ -1634,13 +1611,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const recalc = !!opts.recalc;
 
         container.innerHTML = '';
-        const aiWarn = aiAnalysis && aiAnalysis.source === 'quant-fallback' ? aiAnalysis.warning : null;
-        if (!apiKeyConfigured || aiWarn) {
+        
+        // Clean production badge display
+        if (apiWarning) {
+            const isQuant = !apiKeyConfigured || (aiAnalysis && aiAnalysis.source === 'quant-fallback');
             apiWarning.classList.remove('hidden');
             const msg = apiWarning.querySelector('span');
-            if (msg) msg.textContent = aiWarn ? `💡 ${aiWarn}` : '💡 Set ANTHROPIC_API_KEY for live Claude AI models.';
-        } else {
-            apiWarning.classList.add('hidden');
+            if (msg) {
+                if (isQuant) {
+                    msg.innerHTML = `⚡ <b>Algorithmic Engine Active</b> — Generating rule-based quantitative trade setups`;
+                } else {
+                    msg.innerHTML = `🤖 <b>Claude AI Enhanced</b> — Real-time institutional narrative setups`;
+                }
+            }
         }
 
         if (!recalc) {
@@ -1723,7 +1706,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const text = `${symbol} ${n.long ? 'LONG' : 'SHORT'} · ${idea.setup_type || 'Trade Setup'}\nEntry ${currencySym}${n.entry.toFixed(2)} | Target ${currencySym}${n.target.toFixed(2)} | Stop ${currencySym}${n.stop.toFixed(2)} | R:R 1:${n.rr.toFixed(2)}\nSize ${units} units (risking ${currencySym}${maxRiskAmount.toFixed(2)})`;
                     const done = () => UIK.toast('Trade plan copied', { type: 'success' });
                     if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(text).then(done, () => UIK.toast('Clipboard blocked by the browser', { type: 'warn' }));
+                        navigator.clipboard.writeText(text).then(done, () => UIK.toast('Clipboard blocked by browser', { type: 'warn' }));
                     } else {
                         UIK.toast('Clipboard not available in this context', { type: 'warn' });
                     }
@@ -1733,7 +1716,6 @@ document.addEventListener('DOMContentLoaded', () => {
             container.appendChild(card);
         });
 
-        // Calculator drawer reflects the selected idea (first one by default)
         const n0 = ideaNumbers(ideas[activeIdeaIdx != null ? activeIdeaIdx : 0]);
         const units0 = Math.floor(maxRiskAmount / n0.risk);
         document.getElementById('calc-qty-out').textContent = `${units0.toLocaleString()} units`;
@@ -1783,10 +1765,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // =========================================================================
-    // PHASE 1 & 2: DYNAMIC TRADING TERMINAL ENGINES
+    // DYNAMIC TRADING TERMINAL ENGINES
     // =========================================================================
 
-    // 1. Live Ticker Tape + Watchlist quotes (real prices from /quotes, no simulation)
+    // 1. Live Ticker Tape (real prices from /quotes)
     const marqueeTapeData = [
         { symbol: '^GSPC', name: 'S&P 500', price: null, change: null },
         { symbol: '^IXIC', name: 'NASDAQ', price: null, change: null },
@@ -1851,7 +1833,6 @@ document.addEventListener('DOMContentLoaded', () => {
             ...marqueeTapeData.map(i => i.symbol),
             ...watchlistItems.map(i => i.symbol)
         ])];
-        // Backend caps a request at 30 symbols; send in chunks
         const chunks = [];
         for (let i = 0; i < symbols.length; i += 30) chunks.push(symbols.slice(i, i + 30));
 
@@ -1891,8 +1872,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-
-    // 3. Real-Time Candle Close Countdown Timer Engine
+    // 2. Real-Time Candle Close Countdown Timer Engine
     let updateCountdownTimerFn = null;
 
     function initCandleCountdownTimer() {
@@ -1905,7 +1885,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const assetClass = currentAnalysisData && currentAnalysisData.metadata ? currentAnalysisData.metadata.asset_class : null;
             if ((activeTimeframe === '1d' || activeTimeframe === '1wk') && assetClass !== 'CRYPTO') {
-                // Session close depends on exchange hours; don't show a misleading UTC-midnight timer.
                 timerElem.textContent = '⏱ --';
                 return;
             }
@@ -1949,7 +1928,7 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshQuotes();
     setInterval(() => { if (!document.hidden) refreshQuotes(); }, 15000);
 
-    // ---- Header: clock + session pills
+    // Header clock & session status
     const clockEl = document.getElementById('clock-readout');
     const pillsEl = document.getElementById('session-pills');
     let lastPills = '';
@@ -1965,7 +1944,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tickClock();
     setInterval(tickClock, 1000);
 
-    // ---- Mobile tab navigation
+    // Mobile tabs
     const bodyEl = document.querySelector('.terminal-body');
     function setMobileTab(tab) {
         if (bodyEl) bodyEl.setAttribute('data-mobile-tab', tab);
@@ -1974,10 +1953,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.mobile-tab').forEach(b => b.addEventListener('click', () => setMobileTab(b.getAttribute('data-tab'))));
     setMobileTab('chart');
 
-    // ---- Resizable panels
+    // Splitter resizers
     UIK.initSplitters(bodyEl);
 
-    // ---- Command palette + shortcuts
+    // Command palette & keyboard shortcuts
     UIK.onAnalyze = (sym) => triggerAnalysis(sym, 'AUTO', activeTimeframe);
     const IND_LABELS = { sma20: 'SMA 20', sma50: 'SMA 50', patterns: 'Candlestick patterns', rsi: 'RSI panel', macd: 'MACD panel', orderbook: 'Order book', quant: 'Quant matrix', backtest: 'Backtest panel', news: 'News feed' };
     UIK.palette.setProvider(() => {
@@ -2037,7 +2016,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // ---- First load (restore the last viewed symbol)
+    // Initial load
     const startSymbol = UIK.store.get('symbol', 'AAPL');
     const startItem = watchlistItems.find(i => i.symbol.toUpperCase() === String(startSymbol).toUpperCase());
     triggerAnalysis(startSymbol, startItem ? (startItem.market || 'AUTO') : 'AUTO', activeTimeframe);
