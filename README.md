@@ -1,149 +1,107 @@
 # AI Trade Idea Generator ⚡
 
-A full-stack financial analysis web application that generates data-driven stock trade ideas using real-time market data (`yfinance`), technical indicators (`pandas` + `ta`), and Claude AI (`claude-sonnet-4-6`).
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688?logo=fastapi&logoColor=white)
+![JavaScript](https://img.shields.io/badge/Vanilla%20JS-no%20build-F7DF1E?logo=javascript&logoColor=black)
+![Claude](https://img.shields.io/badge/Claude-AI%20trade%20setups-D97757)
 
-Designed for decoupled deployment on **Render** (FastAPI Backend + Vanilla JS Frontend).
+A real-time trading terminal that turns live market data into **data-driven trade ideas**. It pulls prices with `yfinance`, computes technical indicators with `pandas` + `ta`, asks **Claude** to write validated Entry / Target / Stop setups, and lets you plot them straight onto an interactive chart. No Claude key? It falls back to rule-based setups automatically.
+
+> Stocks · Indian indices & NSE/BSE · Crypto · Forex · Futures & commodities
 
 ---
 
-## 🏗 Architecture Diagram
+## ✨ What You Can Do
 
+| | Feature | Details |
+|---|---|---|
+| 🤖 | **AI trade ideas** | 3–5 setups per symbol with entry, target, stop, reward:risk and reasoning. Every setup is validated (levels must make sense for a long/short) and R:R is recomputed from the numbers. |
+| 📍 | **Plot on chart** | One click draws Entry / Target / Stop lines on the chart. Each card shows a risk-vs-reward bar, LONG/SHORT tag and position size for *your* capital. |
+| 📈 | **Live chart** | TradingView-style candles/line, volume, SMA 20/50, candlestick-pattern markers, live OHLCV readout and a bar-close countdown. |
+| 🧮 | **Indicators** | RSI, MACD, Bollinger Bands, EMA 9/21 cross, ATR, relative volume, support/resistance, 0–100 technical score. |
+| 🔬 | **Backtest** | 1-year RSI + SMA mean-reversion backtest with win rate, ROI, profit factor, max drawdown and an animated equity curve. |
+| 👀 | **Live watchlist & tape** | Prices flash on change, daily-move bars, gainers/losers sort, add/remove with Undo, scrolling market tape. |
+| 📰 | **News & order book** | Latest headlines per symbol; Level-2 depth for crypto, best bid/ask elsewhere. |
+| 💾 | **Remembers everything** | Symbol, timeframe, chart type, indicators, watchlist, capital/risk and panel sizes persist in your browser. |
+
+---
+
+## ⌨️ Power-User Controls
+
+Press **`Ctrl/⌘ + K`** for the command palette: jump to any ticker, switch timeframe or chart type, toggle indicators.
+
+| Key | Action | Key | Action |
+|---|---|---|---|
+| `/` | Focus ticker search | `C` | Toggle candles / line |
+| `1` – `6` | Timeframe 1m · 5m · 15m · 1h · 1D · 1W | `R` | Refresh AI ideas |
+| `[` `]` | Previous / next watchlist symbol | `I` | Open indicators menu |
+| `?` | Show all shortcuts | `Esc` | Close dialogs |
+
+Drag the dividers to resize the side panels (double-click to reset). On phones the layout switches to bottom tabs: **Watchlist · Chart · AI Ideas**.
+
+---
+
+## 🏗 How It Works
+
+```mermaid
+flowchart LR
+    UI["Browser UI<br/>HTML · CSS · Vanilla JS<br/>Lightweight Charts"] -->|fetch| API["FastAPI backend"]
+    API --> YF["yfinance<br/>prices · news · quotes"]
+    API --> TA["pandas + ta<br/>indicators · backtest"]
+    API --> AI["Claude API<br/>trade setups"]
+    API --> DB[("SQLite<br/>history · watchlists")]
+    UI -. "crypto live ticks" .-> BN["Binance WebSocket"]
 ```
-+-------------------------------------------------------+
-|                 FRONTEND (Render Static)              |
-|   HTML5 / Modern Dark CSS / Vanilla JS / Chart.js    |
-+-------------------------------------------------------+
-                           |
-                     HTTP / CORS fetch()
-                           v
-+-------------------------------------------------------+
-|                 BACKEND (Render Web Service)          |
-|                  FastAPI + Uvicorn                    |
-+-------------------------------------------------------+
-        |                          |                  |
-        v                          v                  v
-+---------------+        +------------------+   +--------------------+
-|   yfinance    |        | pandas + ta lib  |   | Claude AI API      |
-| (Price Data)  |        | (RSI, SMAs, S/R) |   | (JSON Trade Setups)|
-+---------------+        +------------------+   +--------------------+
-```
+
+1. **Fetch** OHLCV data for the symbol and timeframe (cached for 5 minutes).
+2. **Compute** indicators, support/resistance and a composite technical score.
+3. **Generate** setups with Claude, then **validate** them. Inconsistent or out-of-range levels are dropped.
+4. **Fall back** to rule-based setups if Claude is unavailable, with a banner explaining why.
+5. **Render** the chart, ideas and panels, then keep prices live via WebSocket (crypto) or 10-second polling.
 
 ---
 
 ## 🛠 Tech Stack
 
-- **Backend**: Python 3.11+, FastAPI, Uvicorn, `yfinance`, `pandas`, `ta` library, `anthropic` SDK, `python-dotenv`.
-- **Frontend**: HTML5, Vanilla CSS3 (Custom Dark Theme with Glassmorphism), Vanilla JavaScript (Fetch API), `Chart.js` (via CDN).
-- **Hosting / Deployment**: Decoupled deployment ready for Render.
+- **Backend:** Python 3.11+, FastAPI, Uvicorn, `yfinance`, `pandas`, `ta`, `anthropic`, SQLite
+- **Frontend:** HTML5, CSS3 (dark terminal theme), Vanilla JavaScript, [Lightweight Charts](https://github.com/tradingview/lightweight-charts) via CDN, no build step
 
 ---
 
-## 🚀 Local Setup Instructions
+## 🚀 Quick Start
 
-### 1. Backend Setup
+### 1. Backend
 
 ```bash
-# Navigate to backend directory
 cd backend
 
-# Create virtual environment (optional but recommended)
 python -m venv venv
-# On Windows:
-venv\Scripts\activate
-# On macOS/Linux:
-source venv/bin/activate
+venv\Scripts\activate          # Windows
+source venv/bin/activate       # macOS / Linux
 
-# Install dependencies
 pip install -r requirements.txt
+cp .env.example .env           # then add your ANTHROPIC_API_KEY (optional)
 
-# Create .env file from template
-cp .env.example .env
-
-# Add your Anthropic API Key in .env
-# ANTHROPIC_API_KEY=your_actual_anthropic_api_key
-
-# Run local development server
-python main.py
-# Server will run at http://127.0.0.1:8000
+python main.py                 # http://127.0.0.1:8000
 ```
 
-### 2. Frontend Setup
+Health check: <http://127.0.0.1:8000/health>
+
+### 2. Frontend
 
 ```bash
-# Navigate to frontend directory
 cd frontend
-
-# Verify config.js points to your local backend:
-# CONFIG.API_BASE_URL = "http://127.0.0.1:8000"
-
-# Serve using any local web server, for example with Python:
-python -m http.server 3000
-
-# Open browser at http://localhost:3000
+python -m http.server 3000     # http://localhost:3000
 ```
 
----
-
-## ☁️ Render Deployment Steps
-
-### 1. Deploy Backend (Render Web Service)
-1. Push your repository to GitHub.
-2. Log into [Render Dashboard](https://dashboard.render.com/) and click **New +** -> **Web Service**.
-3. Connect your repository and set:
-   - **Root Directory**: `backend`
-   - **Environment**: `Python 3`
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-4. Under **Environment Variables**, add:
-   - `ANTHROPIC_API_KEY`: `your_anthropic_api_key_here`
-5. Click **Create Web Service**. Render will generate your backend URL (e.g., `https://ai-trade-idea-backend.onrender.com`).
-
-### 2. Deploy Frontend (Render Static Site)
-1. In `frontend/config.js`, update `API_BASE_URL` to your live Render backend URL:
-   ```javascript
-   const CONFIG = {
-       API_BASE_URL: 'https://ai-trade-idea-backend.onrender.com'
-   };
-   ```
-2. In Render Dashboard, click **New +** -> **Static Site**.
-3. Connect your repository and set:
-   - **Root Directory**: `frontend`
-   - **Build Command**: *(leave empty)*
-   - **Publish Directory**: `.`
-4. Click **Create Static Site**. Your application is now live!
+`frontend/config.js` already points at `http://127.0.0.1:8000`. Change `API_BASE_URL` if your backend runs elsewhere.
 
 ---
 
-## ⚖️ Disclaimer
-*For educational purposes only. Not financial advice. Not a SEBI-registered recommendation.*
+## ⚙️ Configuration
 
----
+Set these in `backend/.env` (all optional):
 
-## ✨ Advanced Frontend Features
-
-New files: `frontend/ui-kit.js` (toasts, command palette, resizable panels, equity chart) and `frontend/dynamic.css`.
-
-- **Command palette** (`Ctrl/⌘ + K`): jump to any ticker, switch timeframe/chart type, toggle indicators.
-- **Keyboard shortcuts**: `/` search · `1–6` timeframes · `C` candles/line · `R` refresh ideas · `I` indicators · `[` `]` prev/next watchlist symbol · `?` help.
-- **Plot trade ideas on the chart**: Entry / Target / Stop price lines, risk-vs-reward bar, LONG/SHORT tag, per-idea position size, copy plan.
-- **Live watchlist**: price-flash rows, daily-move bar, gainers/losers sort, remove with Undo, add with validation.
-- **Loading + error states**: chart loading overlay, skeleton idea cards, error toasts with Retry; stale responses are ignored.
-- **Backtest equity curve** (animated), real values only (no placeholder numbers).
-- **Resizable side panels** (drag the dividers, double-click to reset), market-session pills + clock, live price in the tab title.
-- **Everything persists** in localStorage: symbol, timeframe, chart type, indicators, watchlist, capital/risk, panel widths.
-- **Mobile layout** with bottom tabs (Watchlist / Chart / AI Ideas); respects `prefers-reduced-motion`.
-
----
-
-## 🛠 Backend Fixes (v3.2)
-
-Run the tests (no network or API key needed): `cd backend && pip install -r requirements-dev.txt && pytest -q`
-
-- **Correct numbers**: prices were rounded to 2 decimals everywhere, wrecking crypto/FX (a $0.083 coin showed $0.08, EURUSD 1.08). Precision now fits the price. Indian indices report INR. Support/resistance are ordered nearest-first. Duplicate live bars are removed.
-- **Backtester**: profit factor is a real ratio (or `null` with no losses, previously a currency amount); average R:R is computed from trades (was hardcoded `1:2.25`); no hidden leverage on expensive assets; the final equity point is never dropped.
-- **AI ideas**: Claude output is validated (long: stop < entry < target, short: the reverse, levels within range) and R:R is recomputed. Identical requests are cached for 5 min so you are not billed twice. Default model is `claude-sonnet-4-6` (override with `ANTHROPIC_MODEL`); the old default was a retired model. The API reports `source` (`claude` / `quant-fallback`) and a clear `warning` when Claude is unavailable, shown in the UI banner.
-- **Rule-based fallback** no longer produces inverted setups (e.g. a "long" whose target is below entry); mean reversion goes short when price is above its mean.
-- **Timeframes**: `4h` is a true resample (was mislabeled 1h data); `1wk` fetches 2 years so indicators work; invalid `interval`/`period`/ticker values return `400`.
-- **Security**: salted PBKDF2 passwords (old SHA-256 accounts still log in and are upgraded automatically); input validation on auth/watchlist/alerts; CORS no longer combines `*` with credentials (set `CORS_ORIGINS` in production); upstream errors are logged, not leaked to clients.
-- **Reliability**: thread-safe, size-bounded cache; DB connections always closed, WAL + timeout; trade history de-duplicated and capped at 2,000 rows; live-price cached for 4 s; one bad symbol no longer fails a whole `/quotes` batch.
-- **Known limitations**: `user_id` on watchlist/alert endpoints is client-supplied and there are no session tokens yet (fine for single-user/demo use). Alerts are stored but not yet evaluated.
+| Variable | Default | Purpose |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | none | Enables Claude-written setups. Without it,
