@@ -9,6 +9,8 @@ A real-time trading terminal that turns live market data into **data-driven trad
 
 > Stocks · Indian indices & NSE/BSE · Crypto · Forex · Futures & commodities
 
+**Jump to:** [Features](#-what-you-can-do) · [Shortcuts](#️-power-user-controls) · [How it works](#-how-it-works) · [Quick start](#-quick-start) · [Config](#️-configuration) · [API](#-api-reference) · [Troubleshooting](#-troubleshooting) · [Roadmap](#-roadmap)
+
 ---
 
 ## ✨ What You Can Do
@@ -21,6 +23,7 @@ A real-time trading terminal that turns live market data into **data-driven trad
 | 🧮 | **Indicators** | RSI, MACD, Bollinger Bands, EMA 9/21 cross, ATR, relative volume, support/resistance, 0–100 technical score. |
 | 🔬 | **Backtest** | 1-year RSI + SMA mean-reversion backtest with win rate, ROI, profit factor, max drawdown and an animated equity curve. |
 | 👀 | **Live watchlist & tape** | Prices flash on change, daily-move bars, gainers/losers sort, add/remove with Undo, scrolling market tape. |
+| 🔔 | **Smart alerts** | Set price above/below or RSI above/below alerts. The terminal checks them every 30 s and pops a toast the moment one fires. |
 | 📰 | **News & order book** | Latest headlines per symbol; Level-2 depth for crypto, best bid/ask elsewhere. |
 | 💾 | **Remembers everything** | Symbol, timeframe, chart type, indicators, watchlist, capital/risk and panel sizes persist in your browser. |
 
@@ -104,4 +107,109 @@ Set these in `backend/.env` (all optional):
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | none | Enables Claude-written setups. Without it,
+| `ANTHROPIC_API_KEY` | none | Enables Claude-written setups. Without it, rule-based setups are used. |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-6` | Claude model to use. |
+| `CORS_ORIGINS` | `*` | Comma-separated frontend origins allowed to call the API. |
+| `DATABASE_PATH` | `backend/trade_ideas.db` | Location of the SQLite file. |
+| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO` or `WARNING`. |
+| `RATE_LIMIT_PER_MIN` | `240` | Max requests per minute per client IP (`429` beyond that). |
+
+---
+
+## 🔌 API Reference
+
+Interactive docs are available at `/docs` while the backend is running.
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/analyze` | GET | Full analysis: indicators, chart data and AI trade ideas (`ticker`, `interval`, `period`) |
+| `/live-price` | GET | Latest price and day change for one symbol |
+| `/quotes` | GET | Batch quotes for the watchlist and market tape |
+| `/search` | GET | Ticker and company search suggestions |
+| `/news` | GET | Latest headlines for a symbol |
+| `/orderbook` | GET | Order-book depth (crypto L2, otherwise best bid/ask) |
+| `/backtest` | GET | 1-year strategy backtest with equity curve |
+| `/history` | GET | Previously generated trade ideas |
+| `/watchlist` · `/watchlist/add` · `/watchlist/remove` | GET · POST · DELETE | Saved watchlists |
+| `/alerts` · `/alerts/create` | GET · POST | List and create price / RSI alerts |
+| `/alerts/check` | GET | Evaluates active alerts against live data; returns and retires the ones that fired |
+| `/alerts/remove` | DELETE | Delete an alert |
+| `/auth/register` · `/auth/login` | POST | Basic accounts (salted PBKDF2 passwords) |
+| `/health` | GET | Service and API-key status |
+
+Supported intervals: `1m 5m 15m 30m 1h 4h 1d 1wk`. Supported periods: `1mo 3mo 6mo 1y 2y 5y`.
+
+---
+
+## 🧪 Tests
+
+No network or API key needed:
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+pytest -q
+```
+
+Covers indicator maths, backtester metrics, AI-output validation, alert evaluation, rate limiting, caching, auth, the database and data-fetching rules.
+
+---
+
+## 📁 Project Structure
+
+```
+ai-trade-idea-generator/
+├── backend/
+│   ├── main.py            # FastAPI app and endpoints
+│   ├── data_fetcher.py    # yfinance fetching, ticker resolution, search
+│   ├── indicators.py      # RSI, MACD, Bollinger, ATR, support/resistance
+│   ├── ai_analyzer.py     # Claude prompt, parsing, validation, caching
+│   ├── trade_logic.py     # idea validation, rule-based fallback, JSON safety
+│   ├── backtester.py      # strategy backtest engine
+│   ├── market_extras.py   # quotes, news, order book
+│   ├── auth.py · database.py · cache.py · ratelimit.py
+│   └── tests/
+└── frontend/
+    ├── index.html · style.css · dynamic.css
+    ├── app.js             # terminal logic, chart, ideas, watchlist
+    ├── ui-kit.js          # toasts, command palette, resizable panels, equity chart
+    └── config.js          # API base URL
+```
+
+---
+
+## 🩺 Troubleshooting
+
+| Problem | Fix |
+|---|---|
+| UI says it can't reach the API | Start the backend (`python main.py`) and confirm `API_BASE_URL` in `frontend/config.js`. Check <http://127.0.0.1:8000/health>. |
+| Browser blocks requests (CORS error) | Add your frontend origin to `CORS_ORIGINS` in `backend/.env`, e.g. `http://localhost:3000`. |
+| Ideas show a "rule-based" banner | No valid `ANTHROPIC_API_KEY`, no credit, or the model name is wrong. Set `ANTHROPIC_MODEL` to a model your account can use. |
+| Empty chart or "feed delayed" | Yahoo Finance rate-limited or has no data for that symbol or interval. Wait a minute or try a longer timeframe. |
+| `429 Too many requests` | Raise `RATE_LIMIT_PER_MIN` or reduce polling. |
+| Indian stock not found | Use the Yahoo symbol, e.g. `RELIANCE.NS`, or an index like `^NSEI`. |
+
+---
+
+## 🗺 Roadmap
+
+- [ ] Session tokens so watchlists and alerts are tied to a logged-in user
+- [ ] Background alert worker with browser / email notifications
+- [ ] Exchange-holiday aware market-session pills
+- [ ] More backtest strategies and parameter controls
+
+---
+
+## ⚠️ Known Limitations
+
+- Watchlist and alert endpoints take a client-supplied `user_id` and there are no session tokens yet, so they suit single-user use.
+- Alerts are evaluated while the terminal is open (or when `/alerts/check` is called); there is no background worker or push/email delivery yet.
+- Rate limiting is in-memory and per process, so it suits a single server instance.
+- Market-session pills use regular trading hours only and don't know about exchange holidays.
+- Data comes from Yahoo Finance via `yfinance`, so it can be delayed and is occasionally rate-limited.
+
+---
+
+## ⚖️ Disclaimer
+
+*For educational purposes only. Not financial advice. Not a SEBI-registered recommendation.*
